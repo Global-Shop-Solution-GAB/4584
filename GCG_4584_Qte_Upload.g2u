@@ -1,0 +1,395 @@
+Program.Sub.Preflight.Start
+V.Global.sFilename.Declare(String)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Coded by: WAW
+'Date: 07/24/2017
+'Hooks: 10960 (Script 1 on Open Quote Header Screen)
+'Hooks: 10710 (populate hook to change script 1 button to say Qte Upload)
+'This is a quote for a custom GAB script that will allow the user to upload lines for a quote from the script 1 button on the quote header screen. 
+'The program will read an excel spreadsheet created by the customer, parse the data and call the upload
+'Updated by: Bix
+'Date 12/26/2018
+'Standardized code and added User fields 2,3,4 to upload
+V.Local.sError.Declare(String)
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.If(V.Caller.Hook,=,10710)
+	V.Passed.000201.Set("Qte Upload")
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndIf
+
+'F.ODBC.Connection!conX.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+F.ODBC.Connection!conX.OpenCompanyConnection
+
+'Let the user select an xls spreadsheet
+F.Intrinsic.Control.CallSub(FileSelection,"QuoteNo",V.Passed.000003,"Customer",V.Passed.000006,"ShipTo",V.Passed.000061)
+
+F.Intrinsic.Control.CallSub(Unload)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.Unload.Start
+V.Local.sError.Declare(String)
+F.Intrinsic.Control.Try
+
+'Close the connection and end the program
+F.ODBC.Connection!conX.Close
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Unload.End
+
+Program.Sub.FileSelection.Start
+'Args: QuoteNo, Customer, ShipTo
+V.Local.sError.Declare(String)
+V.Local.sRet.Declare(String)
+V.Local.sQuoteNo.Declare(String)
+V.Local.sTempFull.Declare(String)
+V.Local.sUploadTypes.Declare(String)
+V.Local.sUploadData.Declare(String)
+V.Local.sTitles.Declare(String)
+V.Local.sFile.Declare(String)
+v.Local.bExists.Declare(String)
+v.Local.sTemp.Declare(String)
+F.Intrinsic.Control.Try
+
+'show the openfile dialog box
+F.Intrinsic.UI.ShowOpenFileDialog(,"xlsx|*.xlsx",,V.Local.sFile)
+F.Intrinsic.Control.If(V.Local.sFile.IsCancel)
+	F.Intrinsic.UI.Msgbox("No File Selected!")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.control.EndIf
+
+'read the excel
+F.Automation.MSExcel.ReadSpreadsheet(V.Local.sFile,V.Local.sRet)
+F.Intrinsic.String.Replace(V.Local.sRet,"'",,V.Local.sRet)
+
+'F.Intrinsic.String.Split(V.Local.sRet,V.Ambient.NewLine,V.Local.sRet)
+
+f.Intrinsic.String.Split(v.Local.sRet,"$!$",v.Local.sTemp)
+f.Intrinsic.String.IsInString(v.Local.sTemp(0).ucase,"*!*LOC*!*",True,v.Local.bExists)
+f.Intrinsic.Control.If(v.Local.bExists,=,True)
+	V.Local.sUploadTypes.set("String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String")
+	
+	V.Local.sTitles.Set("Line*!*Part*!*Loc*!*Rev*!*Description*!*UM*!*PL*!*Qty*!*Price*!*Promised_Date*!*Gl_Account*!*Delivery*!*Shipments*!*User_2*!*User_3*!*User_4")
+f.Intrinsic.Control.Else
+	V.Local.sUploadTypes.set("String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String")
+	
+	V.Local.sTitles.Set("Line*!*Part*!*Rev*!*Description*!*UM*!*PL*!*Qty*!*Price*!*Promised_Date*!*Gl_Account*!*Delivery*!*Shipments*!*User_2*!*User_3*!*User_4")
+f.Intrinsic.Control.EndIf
+
+
+F.Data.DataTable.CreateFromString("dtQuote",V.Local.sRet,V.Local.sTitles,V.Local.sUploadTypes,"*!*","$!$",True)
+
+'call the format and upload sub
+F.Intrinsic.Control.CallSub(FormatUpload,"QuoteNo",V.Args.QuoteNo,"Customer",V.Args.Customer,"ShipTo",V.Args.ShipTo)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.FileSelection.End
+
+Program.Sub.FormatUpload.Start
+'Args: QuoteNo, Customer, ShipTo
+V.Local.sError.Declare(String)
+V.Local.sQuoteNo.Declare(String)
+V.Local.sSQL.Declare(String)
+V.Local.sRet.Declare(String)
+V.Local.sFileName.Declare(String)
+V.Local.sPath.Declare(String)
+V.Local.sFinal.Declare(String)
+V.Local.sRow.Declare(String)
+V.Local.sLine.Declare(String)
+V.Local.sAllLines.Declare(String)
+V.Local.sCust.Declare(String)
+V.Local.sShipTo.Declare(String)
+V.Local.sQty.Declare(String)
+V.Local.sPart.Declare(String)
+V.Local.sUser.Declare(String)
+V.Local.sPromDate.Declare(String)
+V.Local.sParam.Declare(String)
+V.Local.sShipments.Declare(String)
+V.Local.sCallWrapperReturn.Declare(String)
+V.Local.sCallWrapFile.Declare(String)
+V.Local.sPL.Declare(String)
+V.Local.sUM.Declare(String)
+V.Local.sPrice.Declare(String)
+V.Local.sDesc.Declare(String)
+V.Local.sGL.Declare(String)
+V.Local.sExtension.Declare(String)
+V.Local.sCost.Declare(String)
+V.Local.sUserField.Declare(String)
+V.Local.bExists.Declare(Boolean)
+V.Local.i.Declare(Long)
+v.Local.sLoc.Declare(String)
+v.Local.sInitFile.Declare(String)
+v.Local.sInitVals.Declare(String)
+v.Local.bGL.Declare(String)
+v.Local.sTemp.Declare(String)
+F.Intrinsic.Control.Try
+
+
+'hardcoded GL Default Acct: "301000" - this was built for another customer originally, trying not to break it. 
+v.Local.sGL.Set("301000")
+
+f.Intrinsic.String.Build("{0}\CUSTOM\GCG_4584_Init.txt",v.Caller.GlobalDir,v.Local.sInitFile)
+
+'check init file for settings.
+f.Intrinsic.File.Exists(v.Local.sInitFile,v.Local.bExists)
+f.Intrinsic.Control.If(v.Local.bExists,=,True)
+	f.Intrinsic.File.File2String(v.Local.sInitFile,v.Local.sInitVals)
+	f.Intrinsic.String.Split(v.Local.sInitVals,v.Ambient.NewLine,v.Local.sInitVals)
+	f.Intrinsic.Control.For(v.Local.i,v.Local.sInitVals.LBound,v.Local.sInitVals.UBound)
+		f.Intrinsic.String.Split(v.Local.sInitVals(v.Local.i).trim,":",v.Local.sTemp)
+		f.Intrinsic.Control.SelectCase(v.Local.sTemp(0))
+			'set GL boolean to use from file or use hardcoded value.
+			f.Intrinsic.Control.Case("USEGL")
+				f.Intrinsic.Control.If(v.Local.sTemp(1).trim,=,"Y")
+					v.Local.bGL.Set(True)
+				f.Intrinsic.Control.Else
+					v.Local.bGL.Set(False)
+					v.Local.sGL.Set(v.Local.sTemp(1).trim)
+				f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.EndSelect
+	f.Intrinsic.Control.Next(v.Local.i)
+f.Intrinsic.Control.EndIf
+
+
+'build the callwrapper return filepath
+F.Intrinsic.String.Build("{0}\{1}",V.Caller.FilesDir,"UPLOADTEST.txt",V.Local.sCallWrapFile)
+
+''format the quote number
+F.Intrinsic.String.LPad(V.Args.QuoteNo,"0",7,V.Local.sQuoteNo)
+'format customer
+F.Intrinsic.String.RPad(V.Args.Customer," ",6,V.Local.sCust)
+'format ship to
+F.Intrinsic.String.RPad(V.Args.ShipTo," ",6, V.Local.sShipTo)
+
+''check to make sure order is saved with no lines
+F.Intrinsic.String.Concat("Select * from V_QUOTE_HEADER Where QUOTE_NO = '",V.Local.sQuoteNo,"';",V.local.sSQL)
+F.ODBC.Connection!conX.OpenRecordsetRO("rst",V.Local.sSQL)
+F.Intrinsic.Control.If(V.ODBC.conX!rst.EOF,=,True)
+	F.Intrinsic.String.Concat("Quote ",V.Local.sQuoteNo," not found, Quote must be saved first.",V.Local.sRet)
+	F.Intrinsic.UI.Msgbox(V.Local.sRet,"Quote Not Saved")
+	F.ODBC.conX!rst.Close
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.Else
+	F.ODBC.conX!rst.Close
+F.Intrinsic.Control.EndIf
+
+'Loop through the datatable and build the file for the upload
+F.Intrinsic.Control.For(V.Local.i,1,V.DataTable.dtQuote.RowCount--,1)
+	V.Local.sCost.Set("0")
+	V.Local.sExtension.Set("0")
+	F.Intrinsic.Control.If(V.DataTable.dtQuote(V.Local.i).LINE!FieldValTrim,<>,"")
+	
+		'set the local variables to use will check tables later to see if there is already info for that part
+		V.Local.sPL.Set(V.DataTable.dtQuote(V.Local.i).PL!FieldValTrim)
+		
+		'if init file says to USEGL = Y, or is passing a GL account# in th InitFile (global\custom\GCG_4584_Init.txt) (USEGL:Y or USEGL:###### is honored), 
+		'then it will use GL from file, if not it will take the hardcoded value set by the original GSS Customer who had this project made, this is to prevent breaking. 
+		f.Intrinsic.Control.If(v.Local.bGL,=,True)
+			V.Local.sGL.Set(V.DataTable.dtQuote(V.Local.i).GL_Account!FieldValTrim)
+		f.Intrinsic.Control.EndIf
+		
+		V.Local.sDesc.Set(V.DataTable.dtQuote(V.Local.i).DESCRIPTION!FieldValTrim)
+		V.Local.sPrice.Set(V.DataTable.dtQuote(V.Local.i).PRICE!FieldValTrim)
+		V.Local.sUM.Set(V.DataTable.dtQuote(V.Local.i).UM!FieldValTrim)
+
+		'pad the record number
+		F.Intrinsic.String.LPad(V.DataTable.dtQuote(V.Local.i).LINE!FieldValTrim,"0",3,V.Local.sLine)
+		
+		'add the quote and the line and Record type which is always 'L'
+		F.Intrinsic.String.Build("{0}{1}L{2}{3}",V.Local.sQuoteNo,V.Local.sLine,V.Local.sCust,V.Local.sShipTo,V.Local.sLine)
+		'pad the line to 24 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",23,V.Local.sLine)
+		'format the qty
+		F.Intrinsic.String.Format(V.DataTable.dtQuote(V.Local.i).QTY!FieldValTrim,"000000000.0000",V.Local.sQty)
+		F.Intrinsic.String.RPad(V.Local.sQty," ",19,V.Local.sQty)
+		
+		'add the quantity from the order
+		F.Intrinsic.String.Build("{0}S{1}",V.Local.sLine,V.Local.sQty,V.Local.sLine)
+		
+		'string the part and rev
+		F.Intrinsic.String.GSSPartString(V.DataTable.dtQuote(V.Local.i).PART!FieldValTrim,V.DataTable.dtQuote(V.Local.i).REV!FieldValTrim,V.Local.sPart)		
+		
+		'get the pl um price and desc from inv master
+		F.Intrinsic.String.Build("Select PRODUCT_LINE, DESCRIPTION, UM_INVENTORY, AMT_PRICE, AMT_COST from V_INVENTORY_MSTR where PART = '{0}';",V.Local.sPart,V.Local.sSQL)
+		F.ODBC.Connection!conX.OpenLocalRecordsetRO("RST",V.Local.sSQL)
+		F.Intrinsic.Control.if(V.ODBC.conX!RST.EOF,=,False)
+			V.Local.sPL.Set(V.ODBC.conX!RST.FieldValTrim!PRODUCT_LINE)
+			V.Local.sDesc.Set(V.ODBC.conX!RST.FieldValTrim!DESCRIPTION)
+			f.Intrinsic.Control.If(V.Local.sPrice,=,"")
+				V.Local.sPrice.Set(V.ODBC.conX!RST.FieldValTrim!AMT_PRICE)
+			f.Intrinsic.Control.EndIf
+			V.Local.sUM.Set(V.ODBC.conX!RST.FieldValTrim!UM_INVENTORY)
+			V.Local.sCost.Set(V.ODBC.conX!RST.FieldValTrim!AMT_COST)
+		f.Intrinsic.Control.EndIf
+		f.ODBC.conX!RST.Close
+			
+		'pad to 59 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",59,V.Local.sLine)
+		'add the unit of measure
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sUM,V.Local.sLine)
+		'pad to 61 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",61,V.Local.sLine)
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sPart,V.Local.sLine)		
+		'pad to 82 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",82,V.Local.sLine)
+		'pad the price
+		F.Intrinsic.String.Format(V.Local.sPrice,"0000000000.000000",V.Local.sPrice)	
+		F.Intrinsic.String.RPad(V.Local.sPrice," ",19,V.Local.sPrice)
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sPrice,V.Local.sLine)
+		'pad the cost
+		F.Intrinsic.String.Format(V.Local.sCost,"0000000000.000000",V.Local.sCost)
+		F.Intrinsic.String.RPad(V.Local.sCost," ",19,V.Local.sCost)
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sCost,V.Local.sLine)
+		'pad to 132 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",132,V.Local.sLine)
+		
+		'pad the description
+		F.Intrinsic.String.RPad(V.Local.sDesc," ",30,V.Local.sDesc)
+		'pad the user field
+		F.Intrinsic.String.RPad(V.DataTable.dtQuote(V.Local.i).DELIVERY!FieldValTrim," ",30,V.Local.sUser)	
+		'build the line with desc and user
+		F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sLine,V.Local.sDesc,V.Local.sUser,V.Local.sLine)
+		
+		'pad to 192 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",192,V.Local.sLine)	
+		
+		'build with user field 2
+		F.Intrinsic.String.Left(V.DataTable.dtQuote(V.Local.i).USER_2!FieldValTrim,30,V.Local.sUserField)
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sUserField,V.Local.sLine)
+		
+		'pad to 222 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",222,V.Local.sLine)	
+		
+		'build with user field 3
+		F.Intrinsic.String.Left(V.DataTable.dtQuote(V.Local.i).USER_3!FieldValTrim,30,V.Local.sUserField)
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sUserField,V.Local.sLine)
+		
+		'pad to 252 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",252,V.Local.sLine)	
+		
+		'build with user field 4
+		F.Intrinsic.String.Left(V.DataTable.dtQuote(V.Local.i).USER_4!FieldValTrim,30,V.Local.sUserField)
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sUserField,V.Local.sLine)
+		
+		'pad to 282 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",282,V.Local.sLine)	
+		
+		'pad the user 5 field/shipments
+		F.Intrinsic.String.RPad(V.DataTable.dtQuote(V.Local.i).SHIPMENTS!FieldValTrim," ",30,V.Local.sShipments)	
+		'build the line with user 5/shipments
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sShipments,V.Local.sLine)
+		
+		'insert location, pad to 2, sline len should be 314 after.
+		'if something = True, add this in.
+'		Function.Intrinsic.Debug.InvokeDebugger
+'		Function.Intrinsic.Debug.Stop
+		
+		f.Intrinsic.String.IsInString(v.DataTable.dtQuote.FieldNames,"*!*Loc*!*",True,v.Local.bExists)
+		f.Intrinsic.Control.If(v.Local.bExists,=,True)
+				
+			F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,v.DataTable.dtQuote(v.Local.i).Loc!Fieldvaltrim,V.Local.sLine)
+			f.Intrinsic.String.RPad(v.Local.sLine," ",314,v.Local.sLine)
+		f.Intrinsic.Control.EndIf
+		
+		'pad to 371 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",371,V.Local.sLine)	
+		'pad the GL Account
+		F.Intrinsic.String.RPad(V.Local.sGL," ",10,V.Local.sGL)	
+		'build the line with GL Account
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sGL,V.Local.sLine)
+		'pad to 469 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",469,V.Local.sLine)
+		
+		F.Intrinsic.Control.If(V.DataTable.dtQuote(V.Local.i).PROMISED_DATE!FieldValTrim,<>,"")
+		
+			'split the promdate based on slashed
+			F.Intrinsic.String.Split(V.DataTable.dtQuote(V.Local.i).PROMISED_DATE!FieldValTrim,"/",V.Local.sPromDate)
+			F.Intrinsic.String.Left(V.Local.sPromDate(2),4,V.Local.sPromDate(2))
+			F.Intrinsic.String.LPad(V.Local.sPromDate(0),"0",2,V.Local.sPromDate(0))
+			F.Intrinsic.String.LPad(V.Local.sPromDate(1),"0",2,V.Local.sPromDate(1))	
+			'format the year
+			F.Intrinsic.String.Right(V.Local.sPromDate(2),2,V.Local.sPromDate(2))
+			f.Intrinsic.String.Build("{0}{1}{2}",V.Local.sPromDate(0),V.Local.sPromDate(1),V.Local.sPromDate(2),V.Local.sPromDate)
+			V.Local.sPromDate.RedimPreserve(0,0)
+		F.Intrinsic.Control.Else
+			v.Local.sPromDate.Set("      ")
+		F.Intrinsic.Control.EndIf
+		'build the line with the promise date
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sPromDate,V.Local.sLine)
+		'pad to 548 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",548,V.Local.sLine)	
+		'add the currency code
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,"USD",V.Local.sLine)
+		'calculate and add the extension
+		F.Intrinsic.Math.Mult(V.Local.sPrice.Float,V.Local.sQty.Float,V.Local.sExtension)
+		F.Intrinsic.String.Format(V.Local.sExtension,"0000000000.000000",V.Local.sExtension)
+		F.Intrinsic.String.RPad(V.Local.sExtension," ",19,V.Local.sExtension)
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sExtension,V.Local.sLine)
+		'pad to 575 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",575,V.Local.sLine)			
+		'add the product line
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sPL,V.Local.sLine)
+		'pad to 613 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",613,V.Local.sLine)	
+		'Add the Discount Price - will be the same as extension.
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sExtension,V.Local.sLine)
+		'pad to 857 characters
+		F.Intrinsic.String.RPad(V.Local.sLine," ",857,V.Local.sLine)	
+		'check to see if this is the first line or not
+		F.Intrinsic.Control.If(V.Local.sFinal.Trim,<>,"")
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sFinal,V.Ambient.NewLine,V.Local.sLine,V.Local.sFinal)	
+		f.Intrinsic.Control.Else
+			V.Local.sfinal.Set(V.Local.sLine)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.i)
+
+'build the filepath/name and see if it exists
+F.Intrinsic.String.build("{0}\{1}",V.Caller.FilesDir,"QUOTE.TXT",V.Local.sPath)
+F.Intrinsic.File.Exists(V.Local.sPath,V.Local.bExists)
+F.Intrinsic.Control.If(V.Local.bExists,=,True)
+	F.Intrinsic.File.DeleteFile(V.Local.sPath)
+F.Intrinsic.Control.EndIf
+
+'write the file
+F.Intrinsic.File.String2File(V.Local.sPath,V.Local.sFinal)
+
+F.Intrinsic.String.build("{0}{1}",v.Caller.CompanyCode,"1UPLQUOTE",V.Local.sParam)
+'F.Intrinsic.Task.LaunchGSSSync("UPL001A","-c",V.Local.sParam)
+F.Global.General.CallWrapperSync(50,"UPLQUOTE/U")
+
+'Set the discount flag to D so that when a user opens a quote line the discount type is set to default
+F.Intrinsic.String.Build("UPDATE Quote_Lines SET Flag_Always_Discount = 'D' WHERE Quote_No = '{0}' AND Record_No <> 'A' AND Record_No <> 'B' AND Record_No <> 'C';",V.Local.sQuoteNo,V.Local.sSQL)
+F.ODBC.Connection!conX.Execute(V.Local.sSQL)
+
+F.Intrinsic.UI.CloseWaitDialog
+F.Intrinsic.UI.Msgbox("Upload Complete")
+'V.Local.sCallWrapperReturn.Set(V.Ambient.CallWrapperReturn)
+'F.Intrinsic.Control.If(V.Local.sCallWrapperReturn.Trim,<>,"")
+'	F.Intrinsic.File.String2File(V.Local.sCallWrapFile,V.Local.sCallWrapperReturn)
+'F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+F.Intrinsic.UI.InvokeWaitDialog("Loading Upload File....Please Wait","")
+Program.Sub.FormatUpload.End
